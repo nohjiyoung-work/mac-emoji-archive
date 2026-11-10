@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>emoji archive</title>
+  <title>이게 내 이모지야!</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500&display=swap" rel="stylesheet">
@@ -12,6 +12,8 @@
   <script defer src="script.js"></script>
 </head>
 <body>
+  <button class="back-to-top back-to-top-left" type="button" aria-label="맨 위로 이동" title="맨 위로 이동"></button>
+  <button class="back-to-top back-to-top-right" type="button" aria-label="맨 위로 이동" title="맨 위로 이동"></button>
   <header><h1>emoji archive</h1></header>
   <main>
     <div class="toolbar">
@@ -23,7 +25,6 @@
     <nav id="categories" aria-label="카테고리"></nav>
     <div id="archive"></div>
     <p id="empty" hidden>검색 결과가 없습니다.</p>
-  
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
