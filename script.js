@@ -1,5 +1,6 @@
-// Apple PNG 이미지 — 데이터 목록은 emoji-datasource-apple 16.0.0 기반.
-// Python 다운로드 도구를 한 번 실행하면 Windows/Mac 공통 PNG를 로컬에서 사용합니다.
+// Apple PNG 이미지 아카이브
+// 우선순위: Emojipedia(160px Apple PNG) → 로컬 저장 PNG → 64px CDN fallback
+const EMOJIPEDIA_BASE = 'https://em-content.zobj.net/source/apple/453/';
 const CDN = 'https://cdn.jsdelivr.net/npm/emoji-datasource-apple@16.0.0/';
 const CDN_ALT = 'https://unpkg.com/emoji-datasource-apple@16.0.0/';
 const archive = document.querySelector('#archive');
@@ -10,6 +11,7 @@ const status = document.querySelector('#status');
 const empty = document.querySelector('#empty');
 const toast = document.querySelector('#toast');
 const imageCache = new Map();
+const OUTPUT_SIZE = 160;
 let groups = [];
 let toastTimer;
 
@@ -36,25 +38,52 @@ function fromUnified(code) {
   return code.split('-').map(part => String.fromCodePoint(parseInt(part, 16))).join('');
 }
 
+function toUnifiedFromSymbol(symbol) {
+  return [...symbol].map(ch => ch.codePointAt(0).toString(16)).join('-').toLowerCase();
+}
+
+function slugifyName(name = '') {
+  return name
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/['’]/g, '')
+    .replace(/:/g, ' ')
+    .replace(/\+/g, ' plus ')
+    .replace(/#/g, ' number ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-');
+}
+
+function makeFileStem(item) {
+  return `${item.slug}_${item.unified}`;
+}
+
 function makeGroups(data) {
-  const map = new Map(groupNames.map(([source, display]) => [source, {name:display, items:[]} ]));
-  for (const emoji of data.sort((a,b) => (a.sort_order ?? 99999) - (b.sort_order ?? 99999))) {
+  const map = new Map(groupNames.map(([source, display]) => [source, {name: display, items: []}]));
+  for (const emoji of data.sort((a, b) => (a.sort_order ?? 99999) - (b.sort_order ?? 99999))) {
     if (!emoji.image || emoji.has_img_apple === false) continue;
     const group = map.get(emoji.category);
     if (!group) continue;
     const name = emoji.name || emoji.short_name || emoji.unified;
+    const shortName = emoji.short_name || (emoji.short_names && emoji.short_names[0]) || name;
     const base = {
-      symbol: fromUnified(emoji.unified), name,
-      image: emoji.image.toLowerCase()
+      symbol: fromUnified(emoji.unified),
+      name,
+      image: emoji.image.toLowerCase(),
+      unified: (emoji.unified || toUnifiedFromSymbol(fromUnified(emoji.unified))).toLowerCase(),
+      slug: slugifyName(name || shortName)
     };
     group.items.push(base);
-    // 피부색 변형도 누락 없이 동일한 위치에 이어 붙입니다.
     for (const skin of Object.values(emoji.skin_variations || {})) {
       if (!skin.image || skin.has_img_apple === false) continue;
+      const skinName = skin.name || `${name} ${skin.unified}`;
       group.items.push({
         symbol: fromUnified(skin.unified),
-        name: `${name} (${skin.unified})`,
-        image: skin.image.toLowerCase()
+        name: skinName,
+        image: skin.image.toLowerCase(),
+        unified: skin.unified.toLowerCase(),
+        slug: slugifyName(skinName)
       });
     }
   }
@@ -62,18 +91,42 @@ function makeGroups(data) {
 }
 
 function fallbackGroups() {
-  // 외부 데이터 접근이 차단됐을 때만 사용: 이전 1,135개 기본 목록
-  return emojiData.map(g => ({name:g.name, items:g.items.map(([symbol,name]) => ({
-    symbol, name,
-    image: [...symbol].map(ch => ch.codePointAt(0).toString(16)).join('-') + '.png'
-  }))}));
+  return emojiData.map(g => ({
+    name: g.name,
+    items: g.items.map(([symbol, name]) => ({
+      symbol,
+      name,
+      image: [...symbol].map(ch => ch.codePointAt(0).toString(16)).join('-') + '.png',
+      unified: toUnifiedFromSymbol(symbol),
+      slug: slugifyName(name)
+    }))
+  }));
 }
 
-// PNG는 로컬 파일을 먼저 시도하고, 없을 때만 CDN으로 요청합니다.
+function emojipediaURL(item) {
+  return `${EMOJIPEDIA_BASE}${makeFileStem(item)}.png`;
+}
+
+function localAppleURL(item) {
+  return `img/apple/${makeFileStem(item)}.png`;
+}
+
+function legacyLocalURL(item) {
+  return `img/apple/${item.image}`;
+}
+
 function candidates(item) {
-  if (item.symbol === '😀') return ['img/grinning-face.png', `img/apple/${item.image}`, CDN + 'img/apple/64/' + item.image, CDN_ALT + 'img/apple/64/' + item.image];
-  if (item.symbol === '😃') return ['img/grinning-face-eyes.png', `img/apple/${item.image}`, CDN + 'img/apple/64/' + item.image, CDN_ALT + 'img/apple/64/' + item.image];
-  return [`img/apple/${item.image}`, CDN + 'img/apple/64/' + item.image, CDN_ALT + 'img/apple/64/' + item.image];
+  const urls = [];
+  // user-provided exact local images
+  if (item.symbol === '😀') urls.push('img/grinning-face.png');
+  if (item.symbol === '😃') urls.push('img/grinning-face-eyes.png');
+  // Prefer Emojipedia 160px URL first for display quality, then local/legacy, then 64px fallback.
+  urls.push(emojipediaURL(item));
+  urls.push(localAppleURL(item));
+  urls.push(legacyLocalURL(item));
+  urls.push(CDN + 'img/apple/64/' + item.image);
+  urls.push(CDN_ALT + 'img/apple/64/' + item.image);
+  return [...new Set(urls)];
 }
 
 async function fetchPNG(url) {
@@ -83,16 +136,42 @@ async function fetchPNG(url) {
       const blob = await r.blob();
       if (!blob.type.includes('png')) throw new Error('PNG 응답이 아닙니다');
       return blob;
-    }).catch(e => {imageCache.delete(url); throw e;}));
+    }).catch(e => {
+      imageCache.delete(url);
+      throw e;
+    }));
   }
   return imageCache.get(url);
+}
+
+async function make160PNG(blob) {
+  const bitmap = await createImageBitmap(blob);
+  try {
+    if (bitmap.width === OUTPUT_SIZE && bitmap.height === OUTPUT_SIZE) return blob;
+    const canvas = document.createElement('canvas');
+    canvas.width = OUTPUT_SIZE;
+    canvas.height = OUTPUT_SIZE;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    const scale = Math.min(OUTPUT_SIZE / bitmap.width, OUTPUT_SIZE / bitmap.height);
+    const width = bitmap.width * scale;
+    const height = bitmap.height * scale;
+    ctx.drawImage(bitmap, (OUTPUT_SIZE - width) / 2, (OUTPUT_SIZE - height) / 2, width, height);
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob(png => png ? resolve(png) : reject(new Error('PNG 변환 실패')), 'image/png');
+    });
+  } finally {
+    bitmap.close();
+  }
 }
 
 function createEmoji(item) {
   const button = document.createElement('button');
   button.className = 'emoji';
   button.type = 'button';
-  button.title = item.name;
+  button.title = `${item.name} — 클릭: PNG 복사 / Shift+클릭: PNG 다운로드`;
   button.setAttribute('aria-label', item.name);
   const img = document.createElement('img');
   img.alt = '';
@@ -108,25 +187,40 @@ function createEmoji(item) {
       failed = true;
       button.classList.add('unavailable');
       button.disabled = true;
-      button.title = `${item.name} — Apple PNG를 불러오지 못했습니다`;
+      button.title = `${item.name} — emoji를 불러오지 못했습니다`;
       img.removeAttribute('src');
     }
   };
   img.src = urls[0];
   button.append(img);
-  button.addEventListener('click', async () => {
+  button.addEventListener('click', async event => {
     if (failed || button.disabled) return;
-    if (!window.isSecureContext || !navigator.clipboard?.write || !window.ClipboardItem) {
+    const isDownload = event.shiftKey;
+    if (!isDownload && (!window.isSecureContext || !navigator.clipboard?.write || !window.ClipboardItem)) {
       return notify('Live Server(localhost) 또는 HTTPS에서 열어주세요.');
     }
     try {
-      // 복사 권한을 유지하기 위해 클릭 이벤트 내에서 즉시 Clipboard API를 호출
-      const pngPromise = fetchPNG(img.currentSrc || img.src);
-      await navigator.clipboard.write([new ClipboardItem({'image/png':pngPromise})]);
-      notify('복사되었습니다!');
+      const outputPromise = fetchPNG(img.currentSrc || img.src).then(make160PNG);
+      if (isDownload) {
+        const png = await outputPromise;
+        const href = URL.createObjectURL(png);
+        const link = document.createElement('a');
+        link.href = href;
+        link.download = `${makeFileStem(item)}.png`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(href), 5000);
+        notify('복사 완료!');
+      } else {
+        await navigator.clipboard.write([
+          new ClipboardItem({'image/png': outputPromise})
+        ]);
+        notify('복사 완료!');
+      }
     } catch (e) {
-      console.error('PNG 복사 오류:', item.name, urls[current], e);
-      notify('복사 실패 — 서버 접근 또는 클립보드 권한 확인');
+      console.error('PNG 처리 오류:', item.name, urls[current], e);
+      notify('실패 — 이미지 서버 또는 클립보드 권한을 확인해주세요.');
     }
   });
   return button;
@@ -148,7 +242,7 @@ function render() {
     const grid = document.createElement('div');
     grid.className = 'grid';
     for (const item of items) grid.appendChild(createEmoji(item));
-    section.append(title,grid);
+    section.append(title, grid);
     archive.appendChild(section);
     const link = document.createElement('a');
     link.href = '#' + section.id;
@@ -178,16 +272,20 @@ async function init() {
       if (!Array.isArray(data) || !data.length) throw Error('빈 데이터');
       origin = label;
       break;
-    } catch (e) { console.info('데이터 소스 사용 불가:',url,e.message); }
+    } catch (e) { console.info('데이터 소스 사용 불가:', url, e.message); }
   }
   if (data) {
     groups = makeGroups(data);
-    status.textContent = `${origin}: ${groups.reduce((n,g) => n+g.items.length,0).toLocaleString()}개 항목. CDN이 차단되면 download_emojis.py로 PNG를 일괄 저장하세요.`;
+    status.textContent = `${origin}: ${groups.reduce((n, g) => n + g.items.length, 0).toLocaleString()}개 항목. 표시 이미지는 Emojipedia의 160px Apple PNG를 우선 사용합니다.`;
   } else {
     groups = fallbackGroups();
-    status.textContent = '전체 데이터 연결 실패: 기본 목록 1,135개만 표시 중입니다. download_emojis.py를 실행하면 전체 목록으로 전환됩니다.';
+    status.textContent = '전체 데이터 연결 실패: 기본 목록 1,135개만 표시 중입니다. 표시 이미지는 Emojipedia 160px URL을 우선 시도합니다.';
   }
   render();
 }
 search.addEventListener('input', render);
 init();
+
+document.querySelectorAll('.back-to-top').forEach(button => {
+  button.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+});
