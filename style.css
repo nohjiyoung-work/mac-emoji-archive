@@ -20,7 +20,7 @@ header {
 
 h1 { 
   margin: 0; 
-  font-size: clamp(28px, 2.5vw, 36px); 
+  font-size: clamp(22px, 2vw, 30px); 
   font-weight: 800; 
   letter-spacing: -.035em; 
 }
@@ -37,14 +37,61 @@ main {
   margin-bottom: 14px; 
 }
 
-#search { min-width: 0; width: 100%; font: inherit; font-size: 13px; padding: 11px 12px; border: 1px solid #ddd; border-radius: 6px; outline-offset: 2px; }
-#count { white-space: nowrap; font-size: 12px; color: #777; font-variant-numeric: tabular-nums; }
-#categories { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0 0 64px; }
-#categories a { color: #666; font-size: 12px; text-decoration: none; }
-#categories a:hover, #categories a:focus-visible { text-decoration: underline; color: #111; }
-section { margin-bottom: 78px; scroll-margin-top: 24px; }
-h2 { font-size: 28px; font-weight: 400; margin: 0 0 14px; letter-spacing: -.03em; }
-.grid { display: grid; grid-template-columns: repeat(10,minmax(0,1fr)); gap: 3px; }
+#search { 
+  min-width: 0;
+  width: 100%; 
+  font: inherit; 
+  font-size: 13px; 
+  padding: 11px 12px; 
+  border: 1px 
+  solid #ddd; 
+  border-radius: 6px; 
+  outline-offset: 2px; 
+}
+
+#count {
+  white-space: nowrap; 
+  font-size: 12px; 
+  color: #777; 
+  font-variant-numeric: tabular-nums; 
+}
+
+#categories { 
+  display: flex; 
+  flex-wrap: wrap; 
+  gap: 6px 12px; 
+  margin: 0 0 64px; 
+}
+
+#categories a { 
+  color: #666; 
+  font-size: 0.75rem; 
+  text-decoration: none; 
+}
+
+#categories a:hover, #categories a:focus-visible { 
+  text-decoration: underline; 
+  color: #111; 
+}
+
+section { 
+  margin-bottom: 78px; 
+  scroll-margin-top: 24px; 
+}
+
+h2 { 
+  font-size: 1rem; 
+  font-weight: 400; 
+  margin: 0 0 14px; 
+  letter-spacing: -.03em; 
+}
+
+.grid { 
+  display: grid;
+  grid-template-columns: repeat(10,minmax(0,1fr));
+  gap: 3px; 
+}
+
 .emoji { appearance: none; display: flex; align-items: center; justify-content: center; width: 100%; min-width: 0; aspect-ratio: 1 / 1; padding: 9%; background: #fff; border: 0; border-radius: 6px; cursor: pointer; }
 .emoji:not(:disabled):hover { background: #eee; }
 .emoji:focus-visible { outline: 2px solid #222; outline-offset: 1px; }
