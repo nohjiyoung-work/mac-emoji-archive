@@ -415,7 +415,7 @@ function createEmoji(item) {
         );
 
         notify(
-          `원본 다운로드 완료! (${data.width}×${data.height}px)`
+          `복사 완료!`
         );
 
       } else {
@@ -430,7 +430,7 @@ function createEmoji(item) {
         const data = await pngPromise;
 
         notify(
-          `복사되었습니다! (${data.width}×${data.height}px)`
+          `복사 완료!`
         );
       }
 
@@ -442,7 +442,7 @@ function createEmoji(item) {
       );
 
       notify(
-        "복사 실패 — Apple PNG 접근 제한 또는 이미지 누락"
+        "복사 실패 ㅜㅠ"
       );
     }
   });
