@@ -1,291 +1,539 @@
-// Apple PNG 이미지 아카이브
-// 우선순위: Emojipedia(160px Apple PNG) → 로컬 저장 PNG → 64px CDN fallback
-const EMOJIPEDIA_BASE = 'https://em-content.zobj.net/source/apple/453/';
-const CDN = 'https://cdn.jsdelivr.net/npm/emoji-datasource-apple@16.0.0/';
-const CDN_ALT = 'https://unpkg.com/emoji-datasource-apple@16.0.0/';
-const archive = document.querySelector('#archive');
-const categories = document.querySelector('#categories');
-const search = document.querySelector('#search');
-const count = document.querySelector('#count');
-const status = document.querySelector('#status');
-const empty = document.querySelector('#empty');
-const toast = document.querySelector('#toast');
-const imageCache = new Map();
-const OUTPUT_SIZE = 160;
+
+/* ========================================
+   APPLE EMOJI ARCHIVE
+   Original PNG only — no upscaling
+======================================== */
+
+// IMAGE SOURCE
+
+const APPLE_SOURCE =
+  "https://em-content.zobj.net/source/apple/453/";
+
+const DATA_SOURCE =
+  "https://cdn.jsdelivr.net/npm/emoji-datasource-apple@16.0.0/emoji.json";
+
+const DATA_SOURCE_ALT =
+  "https://unpkg.com/emoji-datasource-apple@16.0.0/emoji.json";
+
+const MIN_SIZE = 160;
+
+
+// ELEMENTS
+
+const archive = document.querySelector("#archive");
+const categories = document.querySelector("#categories");
+const search = document.querySelector("#search");
+const count = document.querySelector("#count");
+const status = document.querySelector("#status");
+const empty = document.querySelector("#empty");
+const toast = document.querySelector("#toast");
+
 let groups = [];
+let manifest = {};
 let toastTimer;
 
-const groupNames = [
-  ['Smileys & Emotion', 'Smileys'],
-  ['People & Body', 'People'],
-  ['Animals & Nature', 'Animals & Nature'],
-  ['Food & Drink', 'Food & Drink'],
-  ['Activities', 'Activity'],
-  ['Travel & Places', 'Travel & Places'],
-  ['Objects', 'Objects'],
-  ['Symbols', 'Symbols'],
-  ['Flags', 'Flags']
-];
 
-function notify(message) {
-  toast.textContent = message;
-  toast.classList.add('show');
+// CATEGORY NAMES
+
+const groupNames = new Map([
+  ["Smileys & Emotion", "Smileys"],
+  ["People & Body", "People"],
+  ["Animals & Nature", "Animals & Nature"],
+  ["Food & Drink", "Food & Drink"],
+  ["Activities", "Activity"],
+  ["Travel & Places", "Travel & Places"],
+  ["Objects", "Objects"],
+  ["Symbols", "Symbols"],
+  ["Flags", "Flags"]
+]);
+
+
+// KNOWN EMOJIPEDIA FILENAMES
+
+const filenameOverrides = {
+  "1f600": "grinning-face_1f600.png",
+  "1f603": "grinning-face-with-big-eyes_1f603.png",
+  "1f604": "grinning-face-with-smiling-eyes_1f604.png"
+};
+
+
+// NOTIFICATION
+
+function notify(text) {
+  toast.textContent = text;
+  toast.classList.add("show");
+
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
+
+  toastTimer = setTimeout(() => {
+    toast.classList.remove("show");
+  }, 2000);
 }
+
+
+// UNICODE UTILITIES
 
 function fromUnified(code) {
-  return code.split('-').map(part => String.fromCodePoint(parseInt(part, 16))).join('');
+  return code.split("-")
+    .map(part => String.fromCodePoint(
+      parseInt(part, 16)
+    ))
+    .join("");
 }
 
-function toUnifiedFromSymbol(symbol) {
-  return [...symbol].map(ch => ch.codePointAt(0).toString(16)).join('-').toLowerCase();
+function toUnified(symbol) {
+  return [...symbol]
+    .map(char => char.codePointAt(0).toString(16))
+    .join("-");
 }
 
-function slugifyName(name = '') {
+
+// EMOJI FILENAME
+
+function slugify(name = "") {
   return name
     .toLowerCase()
-    .replace(/&/g, ' and ')
-    .replace(/['’]/g, '')
-    .replace(/:/g, ' ')
-    .replace(/\+/g, ' plus ')
-    .replace(/#/g, ' number ')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/-+/g, '-');
+    .replace(/&/g, " and ")
+    .replace(/['’]/g, "")
+    .replace(/:/g, " ")
+    .replace(/\+/g, " plus ")
+    .replace(/#/g, " number ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
-function makeFileStem(item) {
-  return `${item.slug}_${item.unified}`;
+function getFilename(item) {
+  if (filenameOverrides[item.code]) {
+    return filenameOverrides[item.code];
+  }
+
+  return `${slugify(item.name)}_${item.code}.png`;
 }
+
+
+// DATA ORGANIZATION
 
 function makeGroups(data) {
-  const map = new Map(groupNames.map(([source, display]) => [source, {name: display, items: []}]));
-  for (const emoji of data.sort((a, b) => (a.sort_order ?? 99999) - (b.sort_order ?? 99999))) {
-    if (!emoji.image || emoji.has_img_apple === false) continue;
-    const group = map.get(emoji.category);
-    if (!group) continue;
-    const name = emoji.name || emoji.short_name || emoji.unified;
-    const shortName = emoji.short_name || (emoji.short_names && emoji.short_names[0]) || name;
-    const base = {
-      symbol: fromUnified(emoji.unified),
+  const map = new Map(
+    [...groupNames.values()].map(name => [
       name,
-      image: emoji.image.toLowerCase(),
-      unified: (emoji.unified || toUnifiedFromSymbol(fromUnified(emoji.unified))).toLowerCase(),
-      slug: slugifyName(name || shortName)
-    };
-    group.items.push(base);
-    for (const skin of Object.values(emoji.skin_variations || {})) {
-      if (!skin.image || skin.has_img_apple === false) continue;
-      const skinName = skin.name || `${name} ${skin.unified}`;
-      group.items.push({
-        symbol: fromUnified(skin.unified),
-        name: skinName,
-        image: skin.image.toLowerCase(),
-        unified: skin.unified.toLowerCase(),
-        slug: slugifyName(skinName)
-      });
+      { name, items: [] }
+    ])
+  );
+
+  const sorted = [...data].sort(
+    (a, b) =>
+      (a.sort_order ?? 99999) -
+      (b.sort_order ?? 99999)
+  );
+
+  sorted.forEach(emoji => {
+    const category = groupNames.get(emoji.category);
+    const group = map.get(category);
+
+    if (!group) return;
+    if (!emoji.image || emoji.has_img_apple === false) {
+      return;
     }
-  }
-  return [...map.values()].filter(g => g.items.length);
+
+    const name =
+      emoji.name ||
+      emoji.short_name ||
+      emoji.unified;
+
+    group.items.push({
+      name,
+      symbol: fromUnified(emoji.unified),
+      code: emoji.unified.toLowerCase()
+    });
+
+    Object.values(emoji.skin_variations || {})
+      .forEach(skin => {
+        if (!skin.image || skin.has_img_apple === false) {
+          return;
+        }
+
+        group.items.push({
+          name: skin.name || `${name} ${skin.unified}`,
+          symbol: fromUnified(skin.unified),
+          code: skin.unified.toLowerCase()
+        });
+      });
+  });
+
+  return [...map.values()].filter(
+    group => group.items.length > 0
+  );
 }
 
+
+// OFFLINE DATA FALLBACK
+
 function fallbackGroups() {
-  return emojiData.map(g => ({
-    name: g.name,
-    items: g.items.map(([symbol, name]) => ({
+  if (typeof emojiData === "undefined") {
+    return [];
+  }
+
+  return emojiData.map(group => ({
+    name: group.name,
+
+    items: group.items.map(([symbol, name]) => ({
       symbol,
       name,
-      image: [...symbol].map(ch => ch.codePointAt(0).toString(16)).join('-') + '.png',
-      unified: toUnifiedFromSymbol(symbol),
-      slug: slugifyName(name)
+      code: toUnified(symbol)
     }))
   }));
 }
 
-function emojipediaURL(item) {
-  return `${EMOJIPEDIA_BASE}${makeFileStem(item)}.png`;
-}
 
-function localAppleURL(item) {
-  return `img/apple/${makeFileStem(item)}.png`;
-}
+// IMAGE SOURCES
 
-function legacyLocalURL(item) {
-  return `img/apple/${item.image}`;
-}
+function imageSources(item) {
+  const filename = getFilename(item);
+  const sources = [];
 
-function candidates(item) {
-  const urls = [];
-  // user-provided exact local images
-  if (item.symbol === '😀') urls.push('img/grinning-face.png');
-  if (item.symbol === '😃') urls.push('img/grinning-face-eyes.png');
-  // Prefer Emojipedia 160px URL first for display quality, then local/legacy, then 64px fallback.
-  urls.push(emojipediaURL(item));
-  urls.push(localAppleURL(item));
-  urls.push(legacyLocalURL(item));
-  urls.push(CDN + 'img/apple/64/' + item.image);
-  urls.push(CDN_ALT + 'img/apple/64/' + item.image);
-  return [...new Set(urls)];
-}
-
-async function fetchPNG(url) {
-  if (!imageCache.has(url)) {
-    imageCache.set(url, fetch(url).then(async r => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const blob = await r.blob();
-      if (!blob.type.includes('png')) throw new Error('PNG 응답이 아닙니다');
-      return blob;
-    }).catch(e => {
-      imageCache.delete(url);
-      throw e;
-    }));
+  // Local original PNG downloaded by Python.
+  if (manifest[item.code]) {
+    sources.push(`img/apple/${manifest[item.code]}`);
   }
-  return imageCache.get(url);
+
+  // Two original images supplied earlier.
+  if (item.code === "1f600") {
+    sources.push("img/grinning-face.png");
+  }
+
+  if (item.code === "1f603") {
+    sources.push("img/grinning-face-eyes.png");
+  }
+
+  // Original Emojipedia PNG.
+  sources.push(`${APPLE_SOURCE}${filename}`);
+
+  return [...new Set(sources)];
 }
 
-async function make160PNG(blob) {
+
+// FETCH ORIGINAL PNG
+
+async function getOriginalPNG(url) {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const blob = await response.blob();
+
+  // Verify PNG format.
+  const signature = new Uint8Array(
+    await blob.slice(0, 8).arrayBuffer()
+  );
+
+  const validPNG = [
+    137, 80, 78, 71, 13, 10, 26, 10
+  ].every((byte, i) => signature[i] === byte);
+
+  if (!validPNG) {
+    throw new Error("PNG 파일이 아닙니다.");
+  }
+
+  // Verify original dimensions.
   const bitmap = await createImageBitmap(blob);
-  try {
-    if (bitmap.width === OUTPUT_SIZE && bitmap.height === OUTPUT_SIZE) return blob;
-    const canvas = document.createElement('canvas');
-    canvas.width = OUTPUT_SIZE;
-    canvas.height = OUTPUT_SIZE;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    const scale = Math.min(OUTPUT_SIZE / bitmap.width, OUTPUT_SIZE / bitmap.height);
-    const width = bitmap.width * scale;
-    const height = bitmap.height * scale;
-    ctx.drawImage(bitmap, (OUTPUT_SIZE - width) / 2, (OUTPUT_SIZE - height) / 2, width, height);
-    return await new Promise((resolve, reject) => {
-      canvas.toBlob(png => png ? resolve(png) : reject(new Error('PNG 변환 실패')), 'image/png');
-    });
-  } finally {
-    bitmap.close();
+
+  const width = bitmap.width;
+  const height = bitmap.height;
+
+  bitmap.close();
+
+  if (width < MIN_SIZE || height < MIN_SIZE) {
+    throw new Error(
+      `원본 해상도가 부족합니다: ${width}x${height}px`
+    );
   }
+
+  // Return the original file. No resizing.
+  return blob;
 }
+
+
+// DOWNLOAD ORIGINAL PNG
+
+function downloadPNG(blob, filename) {
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 5000);
+}
+
+
+// CREATE EMOJI BUTTON
 
 function createEmoji(item) {
-  const button = document.createElement('button');
-  button.className = 'emoji';
-  button.type = 'button';
-  button.title = `${item.name} — 클릭: PNG 복사 / Shift+클릭: PNG 다운로드`;
-  button.setAttribute('aria-label', item.name);
-  const img = document.createElement('img');
-  img.alt = '';
-  img.loading = 'lazy';
-  img.decoding = 'async';
-  const urls = candidates(item);
-  let current = 0;
-  let failed = false;
-  img.onerror = () => {
-    current++;
-    if (current < urls.length) img.src = urls[current];
-    else {
-      failed = true;
-      button.classList.add('unavailable');
+  const button = document.createElement("button");
+  const img = document.createElement("img");
+
+  button.className = "emoji";
+  button.type = "button";
+
+  button.title =
+    `${item.name} — Click: Copy / Shift+Click: Download`;
+
+  button.setAttribute("aria-label", item.name);
+
+  img.alt = "";
+  img.loading = "lazy";
+  img.decoding = "async";
+
+  const sources = imageSources(item);
+
+  let sourceIndex = 0;
+  let ready = false;
+
+  button.disabled = true;
+
+  // Load next original image if current source fails.
+  function tryNextSource() {
+    sourceIndex++;
+
+    if (sourceIndex < sources.length) {
+      img.src = sources[sourceIndex];
+    } else {
       button.disabled = true;
-      button.title = `${item.name} — emoji를 불러오지 못했습니다`;
-      img.removeAttribute('src');
+      button.classList.add("unavailable");
+      button.title =
+        `${item.name} — Apple PNG 원본을 찾지 못했습니다.`;
+
+      img.removeAttribute("src");
     }
+  }
+
+  img.onload = () => {
+    // Do not accept 64px images.
+    if (
+      img.naturalWidth < MIN_SIZE ||
+      img.naturalHeight < MIN_SIZE
+    ) {
+      tryNextSource();
+      return;
+    }
+
+    ready = true;
+    button.disabled = false;
+    button.classList.remove("unavailable");
   };
-  img.src = urls[0];
-  button.append(img);
-  button.addEventListener('click', async event => {
-    if (failed || button.disabled) return;
+
+  img.onerror = () => {
+    ready = false;
+    tryNextSource();
+  };
+
+  img.src = sources[sourceIndex];
+
+  button.appendChild(img);
+
+
+  // COPY / DOWNLOAD
+
+  button.addEventListener("click", async event => {
+    if (!ready || button.disabled) return;
+
     const isDownload = event.shiftKey;
-    if (!isDownload && (!window.isSecureContext || !navigator.clipboard?.write || !window.ClipboardItem)) {
-      return notify('Live Server(localhost) 또는 HTTPS에서 열어주세요.');
+
+    if (
+      !isDownload &&
+      (
+        !window.isSecureContext ||
+        !navigator.clipboard?.write ||
+        !window.ClipboardItem
+      )
+    ) {
+      notify("HTTPS 또는 Live Server에서 실행해주세요.");
+      return;
     }
+
     try {
-      const outputPromise = fetchPNG(img.currentSrc || img.src).then(make160PNG);
+      const url = img.currentSrc || img.src;
+
+      // Original PNG only.
+      const pngPromise = getOriginalPNG(url);
+
       if (isDownload) {
-        const png = await outputPromise;
-        const href = URL.createObjectURL(png);
-        const link = document.createElement('a');
-        link.href = href;
-        link.download = `${makeFileStem(item)}.png`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(() => URL.revokeObjectURL(href), 5000);
-        notify('복사 완료!');
+        const png = await pngPromise;
+
+        downloadPNG(png, getFilename(item));
+
+        notify("원본 PNG 다운로드 완료!");
       } else {
         await navigator.clipboard.write([
-          new ClipboardItem({'image/png': outputPromise})
+          new ClipboardItem({
+            "image/png": pngPromise
+          })
         ]);
-        notify('복사 완료!');
+
+        notify("복사되었습니다!");
       }
-    } catch (e) {
-      console.error('PNG 처리 오류:', item.name, urls[current], e);
-      notify('실패 — 이미지 서버 또는 클립보드 권한을 확인해주세요.');
+
+    } catch (error) {
+      console.error(
+        "Apple PNG 처리 실패:",
+        item.name,
+        error
+      );
+
+      if (
+        error instanceof TypeError ||
+        error.name === "SecurityError"
+      ) {
+        notify("외부 이미지 접근 제한입니다. 원본 PNG를 로컬에 저장해주세요.");
+      } else {
+        notify(`복사 실패: ${error.message}`);
+      }
     }
   });
+
   return button;
 }
 
+
+// RENDER GRID
+
 function render() {
-  const q = search.value.toLowerCase().trim();
+  const keyword = search.value.toLowerCase().trim();
+
   archive.replaceChildren();
   categories.replaceChildren();
+
   let total = 0;
-  groups.forEach((group, i) => {
-    const items = group.items.filter(item => !q || item.name.toLowerCase().includes(q) || item.symbol.includes(q) || group.name.toLowerCase().includes(q));
+
+  groups.forEach((group, index) => {
+    const items = group.items.filter(item =>
+      !keyword ||
+      item.name.toLowerCase().includes(keyword) ||
+      item.symbol.includes(keyword) ||
+      group.name.toLowerCase().includes(keyword)
+    );
+
     if (!items.length) return;
+
     total += items.length;
-    const section = document.createElement('section');
-    section.id = 'category-' + i;
-    const title = document.createElement('h2');
+
+    const section = document.createElement("section");
+    section.id = `category-${index}`;
+
+    const title = document.createElement("h2");
     title.textContent = group.name;
-    const grid = document.createElement('div');
-    grid.className = 'grid';
-    for (const item of items) grid.appendChild(createEmoji(item));
+
+    const grid = document.createElement("div");
+    grid.className = "grid";
+
+    items.forEach(item => {
+      grid.appendChild(createEmoji(item));
+    });
+
     section.append(title, grid);
     archive.appendChild(section);
-    const link = document.createElement('a');
-    link.href = '#' + section.id;
+
+    const link = document.createElement("a");
+
+    link.href = `#${section.id}`;
     link.textContent = group.name;
-    categories.append(link);
+
+    categories.appendChild(link);
   });
+
   count.textContent = `${total.toLocaleString()} emoji`;
   empty.hidden = total !== 0;
 }
 
-async function fetchList(url) {
+
+// LOAD JSON
+
+async function loadJSON(url) {
   const response = await fetch(url);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
   return response.json();
 }
 
+
+// INITIALIZE
+
 async function init() {
-  let data;
-  let origin = '';
-  for (const [url, label] of [
-    ['emoji-data.json', '로컬 데이터'],
-    [CDN + 'emoji.json', '온라인 전체 데이터'],
-    [CDN_ALT + 'emoji.json', '온라인 보조 데이터']
-  ]) {
+  // Load verified local original filenames.
+  try {
+    const saved = await loadJSON("emoji-manifest.json");
+    manifest = saved.files || {};
+  } catch (error) {
+    console.info("로컬 이미지 목록 없음. 온라인 원본을 사용합니다.");
+  }
+
+  const dataSources = [
+    "emoji-data.json",
+    DATA_SOURCE,
+    DATA_SOURCE_ALT
+  ];
+
+  for (const url of dataSources) {
     try {
-      data = await fetchList(url);
-      if (!Array.isArray(data) || !data.length) throw Error('빈 데이터');
-      origin = label;
-      break;
-    } catch (e) { console.info('데이터 소스 사용 불가:', url, e.message); }
+      const data = await loadJSON(url);
+
+      if (!Array.isArray(data) || !data.length) {
+        continue;
+      }
+
+      groups = makeGroups(data);
+
+      status.textContent =
+        "Apple original PNG — 160px or higher";
+
+      render();
+      return;
+
+    } catch (error) {
+      console.warn("목록 로딩 실패:", url, error);
+    }
   }
-  if (data) {
-    groups = makeGroups(data);
-    status.textContent = `${origin}: ${groups.reduce((n, g) => n + g.items.length, 0).toLocaleString()}개 항목. 표시 이미지는 Emojipedia의 160px Apple PNG를 우선 사용합니다.`;
-  } else {
-    groups = fallbackGroups();
-    status.textContent = '전체 데이터 연결 실패: 기본 목록 1,135개만 표시 중입니다. 표시 이미지는 Emojipedia 160px URL을 우선 시도합니다.';
-  }
+
+  groups = fallbackGroups();
+
+  status.textContent =
+    "Apple original PNG — fallback emoji list";
+
   render();
 }
-search.addEventListener('input', render);
-init();
 
-document.querySelectorAll('.back-to-top').forEach(button => {
-  button.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
-});
+
+// SEARCH
+
+search.addEventListener("input", render);
+
+
+// BACK TO TOP
+
+document.querySelectorAll(".back-to-top")
+  .forEach(button => {
+    button.addEventListener("click", () => {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+      });
+    });
+  });
+
+
+// START
+
+init();
