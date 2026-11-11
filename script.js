@@ -1,21 +1,22 @@
 
 /* ========================================
    APPLE EMOJI ARCHIVE
-   Original PNG only — no upscaling
+   Original PNG / Default Variations Only
 ======================================== */
 
-// IMAGE SOURCE
+// IMAGE SOURCES
 
-const APPLE_SOURCE =
+const APPLE_160 =
+  "https://raw.githubusercontent.com/iamcal/emoji-data/master/img-apple-160/";
+
+const EMOJIPEDIA =
   "https://em-content.zobj.net/source/apple/453/";
 
-const DATA_SOURCE =
-  "https://cdn.jsdelivr.net/npm/emoji-datasource-apple@16.0.0/emoji.json";
+const CDN =
+  "https://cdn.jsdelivr.net/npm/emoji-datasource-apple@16.0.0/";
 
-const DATA_SOURCE_ALT =
-  "https://unpkg.com/emoji-datasource-apple@16.0.0/emoji.json";
-
-const MIN_SIZE = 160;
+const CDN_ALT =
+  "https://unpkg.com/emoji-datasource-apple@16.0.0/";
 
 
 // ELEMENTS
@@ -33,9 +34,9 @@ let manifest = {};
 let toastTimer;
 
 
-// CATEGORY NAMES
+// CATEGORIES
 
-const groupNames = new Map([
+const categoryNames = new Map([
   ["Smileys & Emotion", "Smileys"],
   ["People & Body", "People"],
   ["Animals & Nature", "Animals & Nature"],
@@ -48,7 +49,7 @@ const groupNames = new Map([
 ]);
 
 
-// KNOWN EMOJIPEDIA FILENAMES
+// KNOWN FILENAMES
 
 const filenameOverrides = {
   "1f600": "grinning-face_1f600.png",
@@ -59,8 +60,8 @@ const filenameOverrides = {
 
 // NOTIFICATION
 
-function notify(text) {
-  toast.textContent = text;
+function notify(message) {
+  toast.textContent = message;
   toast.classList.add("show");
 
   clearTimeout(toastTimer);
@@ -71,13 +72,12 @@ function notify(text) {
 }
 
 
-// UNICODE UTILITIES
+// UNICODE
 
 function fromUnified(code) {
-  return code.split("-")
-    .map(part => String.fromCodePoint(
-      parseInt(part, 16)
-    ))
+  return code
+    .split("-")
+    .map(part => String.fromCodePoint(parseInt(part, 16)))
     .join("");
 }
 
@@ -88,7 +88,7 @@ function toUnified(symbol) {
 }
 
 
-// EMOJI FILENAME
+// FILE NAMES
 
 function slugify(name = "") {
   return name
@@ -111,15 +111,18 @@ function getFilename(item) {
 }
 
 
-// DATA ORGANIZATION
+// GROUPS
+// Only default emoji, no skin-tone variations.
 
 function makeGroups(data) {
-  const map = new Map(
-    [...groupNames.values()].map(name => [
+  const map = new Map();
+
+  for (const name of categoryNames.values()) {
+    map.set(name, {
       name,
-      { name, items: [] }
-    ])
-  );
+      items: []
+    });
+  }
 
   const sorted = [...data].sort(
     (a, b) =>
@@ -127,39 +130,31 @@ function makeGroups(data) {
       (b.sort_order ?? 99999)
   );
 
-  sorted.forEach(emoji => {
-    const category = groupNames.get(emoji.category);
+  const seen = new Set();
+
+  for (const emoji of sorted) {
+    if (!emoji.unified || !emoji.image) continue;
+    if (emoji.has_img_apple === false) continue;
+
+    const category = categoryNames.get(emoji.category);
     const group = map.get(category);
 
-    if (!group) return;
-    if (!emoji.image || emoji.has_img_apple === false) {
-      return;
-    }
+    if (!group) continue;
 
-    const name =
-      emoji.name ||
-      emoji.short_name ||
-      emoji.unified;
+    const code = emoji.unified.toLowerCase();
+
+    if (seen.has(code)) continue;
+    seen.add(code);
 
     group.items.push({
-      name,
-      symbol: fromUnified(emoji.unified),
-      code: emoji.unified.toLowerCase()
+      name: emoji.name || emoji.short_name || code,
+      symbol: fromUnified(code),
+      code,
+      image: emoji.image.toLowerCase()
     });
 
-    Object.values(emoji.skin_variations || {})
-      .forEach(skin => {
-        if (!skin.image || skin.has_img_apple === false) {
-          return;
-        }
-
-        group.items.push({
-          name: skin.name || `${name} ${skin.unified}`,
-          symbol: fromUnified(skin.unified),
-          code: skin.unified.toLowerCase()
-        });
-      });
-  });
+    // Skin variations are intentionally excluded.
+  }
 
   return [...map.values()].filter(
     group => group.items.length > 0
@@ -167,7 +162,7 @@ function makeGroups(data) {
 }
 
 
-// OFFLINE DATA FALLBACK
+// FALLBACK DATA
 
 function fallbackGroups() {
   if (typeof emojiData === "undefined") {
@@ -180,24 +175,26 @@ function fallbackGroups() {
     items: group.items.map(([symbol, name]) => ({
       symbol,
       name,
-      code: toUnified(symbol)
+      code: toUnified(symbol),
+      image: `${toUnified(symbol)}.png`
     }))
   }));
 }
 
 
-// IMAGE SOURCES
+// IMAGE URLS
 
 function imageSources(item) {
-  const filename = getFilename(item);
   const sources = [];
 
-  // Local original PNG downloaded by Python.
+  // Downloaded local original PNG.
   if (manifest[item.code]) {
-    sources.push(`img/apple/${manifest[item.code]}`);
+    sources.push(
+      `img/apple/${manifest[item.code]}`
+    );
   }
 
-  // Two original images supplied earlier.
+  // User-provided original PNGs.
   if (item.code === "1f600") {
     sources.push("img/grinning-face.png");
   }
@@ -206,16 +203,23 @@ function imageSources(item) {
     sources.push("img/grinning-face-eyes.png");
   }
 
-  // Original Emojipedia PNG.
-  sources.push(`${APPLE_SOURCE}${filename}`);
+  // Apple 160px image source.
+  if (item.image) {
+    sources.push(APPLE_160 + item.image);
+  }
+
+  // Emojipedia original Apple image.
+  sources.push(
+    EMOJIPEDIA + getFilename(item)
+  );
 
   return [...new Set(sources)];
 }
 
 
-// FETCH ORIGINAL PNG
+// READ ORIGINAL PNG
 
-async function getOriginalPNG(url) {
+async function readPNG(url) {
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -224,42 +228,76 @@ async function getOriginalPNG(url) {
 
   const blob = await response.blob();
 
-  // Verify PNG format.
-  const signature = new Uint8Array(
-    await blob.slice(0, 8).arrayBuffer()
+  const header = new Uint8Array(
+    await blob.slice(0, 24).arrayBuffer()
   );
 
-  const validPNG = [
+  const signature = [
     137, 80, 78, 71, 13, 10, 26, 10
-  ].every((byte, i) => signature[i] === byte);
+  ];
 
-  if (!validPNG) {
-    throw new Error("PNG 파일이 아닙니다.");
+  if (
+    header.length < 24 ||
+    !signature.every((byte, i) => header[i] === byte)
+  ) {
+    throw new Error("Invalid PNG");
   }
 
-  // Verify original dimensions.
-  const bitmap = await createImageBitmap(blob);
+  const view = new DataView(header.buffer);
 
-  const width = bitmap.width;
-  const height = bitmap.height;
+  const width = view.getUint32(16);
+  const height = view.getUint32(20);
 
-  bitmap.close();
+  return {
+    blob,
+    width,
+    height
+  };
+}
 
-  if (width < MIN_SIZE || height < MIN_SIZE) {
-    throw new Error(
-      `원본 해상도가 부족합니다: ${width}x${height}px`
-    );
+
+// FIND ORIGINAL PNG
+// No image resizing or upscaling.
+
+async function getOriginalPNG(item, currentURL) {
+  const sources = [
+    currentURL,
+    ...imageSources(item)
+  ].filter(Boolean);
+
+  const unique = [...new Set(sources)];
+
+  for (const url of unique) {
+    try {
+      const result = await readPNG(url);
+
+      // Original PNG must be at least 160px.
+      if (
+        result.width >= 160 &&
+        result.height >= 160
+      ) {
+        return result;
+      }
+
+    } catch (error) {
+      console.info(
+        "Image unavailable:",
+        url,
+        error.message
+      );
+    }
   }
 
-  // Return the original file. No resizing.
-  return blob;
+  throw new Error(
+    "160px 이상 Apple PNG를 찾지 못했습니다."
+  );
 }
 
 
 // DOWNLOAD ORIGINAL PNG
 
-function downloadPNG(blob, filename) {
-  const url = URL.createObjectURL(blob);
+function downloadPNG(data, filename) {
+  const url = URL.createObjectURL(data.blob);
 
   const link = document.createElement("a");
 
@@ -301,8 +339,9 @@ function createEmoji(item) {
 
   button.disabled = true;
 
-  // Load next original image if current source fails.
-  function tryNextSource() {
+  // Try the next Apple source if the first fails.
+  function nextImage() {
+    ready = false;
     sourceIndex++;
 
     if (sourceIndex < sources.length) {
@@ -310,20 +349,17 @@ function createEmoji(item) {
     } else {
       button.disabled = true;
       button.classList.add("unavailable");
-      button.title =
-        `${item.name} — Apple PNG 원본을 찾지 못했습니다.`;
-
+      button.title = `${item.name} — Apple PNG unavailable`;
       img.removeAttribute("src");
     }
   }
 
   img.onload = () => {
-    // Do not accept 64px images.
     if (
-      img.naturalWidth < MIN_SIZE ||
-      img.naturalHeight < MIN_SIZE
+      img.naturalWidth < 160 ||
+      img.naturalHeight < 160
     ) {
-      tryNextSource();
+      nextImage();
       return;
     }
 
@@ -332,12 +368,13 @@ function createEmoji(item) {
     button.classList.remove("unavailable");
   };
 
-  img.onerror = () => {
-    ready = false;
-    tryNextSource();
-  };
+  img.onerror = nextImage;
 
-  img.src = sources[sourceIndex];
+  if (sources.length) {
+    img.src = sources[0];
+  } else {
+    button.classList.add("unavailable");
+  }
 
   button.appendChild(img);
 
@@ -362,42 +399,51 @@ function createEmoji(item) {
     }
 
     try {
-      const url = img.currentSrc || img.src;
+      const currentURL = img.currentSrc || img.src;
 
-      // Original PNG only.
-      const pngPromise = getOriginalPNG(url);
+      const pngPromise = getOriginalPNG(
+        item,
+        currentURL
+      );
 
       if (isDownload) {
-        const png = await pngPromise;
+        const data = await pngPromise;
 
-        downloadPNG(png, getFilename(item));
+        downloadPNG(
+          data,
+          getFilename(item)
+        );
 
-        notify("원본 PNG 다운로드 완료!");
+        notify(
+          `원본 다운로드 완료! (${data.width}×${data.height}px)`
+        );
+
       } else {
         await navigator.clipboard.write([
           new ClipboardItem({
-            "image/png": pngPromise
+            "image/png": pngPromise.then(
+              result => result.blob
+            )
           })
         ]);
 
-        notify("복사되었습니다!");
+        const data = await pngPromise;
+
+        notify(
+          `복사되었습니다! (${data.width}×${data.height}px)`
+        );
       }
 
     } catch (error) {
       console.error(
-        "Apple PNG 처리 실패:",
+        "PNG processing failed:",
         item.name,
         error
       );
 
-      if (
-        error instanceof TypeError ||
-        error.name === "SecurityError"
-      ) {
-        notify("외부 이미지 접근 제한입니다. 원본 PNG를 로컬에 저장해주세요.");
-      } else {
-        notify(`복사 실패: ${error.message}`);
-      }
+      notify(
+        "복사 실패 — Apple PNG 접근 제한 또는 이미지 누락"
+      );
     }
   });
 
@@ -405,7 +451,7 @@ function createEmoji(item) {
 }
 
 
-// RENDER GRID
+// RENDER ALL DEFAULT EMOJIS
 
 function render() {
   const keyword = search.value.toLowerCase().trim();
@@ -420,6 +466,7 @@ function render() {
       !keyword ||
       item.name.toLowerCase().includes(keyword) ||
       item.symbol.includes(keyword) ||
+      item.code.includes(keyword) ||
       group.name.toLowerCase().includes(keyword)
     );
 
@@ -436,9 +483,10 @@ function render() {
     const grid = document.createElement("div");
     grid.className = "grid";
 
-    items.forEach(item => {
+    // One button per default emoji.
+    for (const item of items) {
       grid.appendChild(createEmoji(item));
-    });
+    }
 
     section.append(title, grid);
     archive.appendChild(section);
@@ -451,12 +499,14 @@ function render() {
     categories.appendChild(link);
   });
 
-  count.textContent = `${total.toLocaleString()} emoji`;
+  count.textContent =
+    `${total.toLocaleString()} emoji`;
+
   empty.hidden = total !== 0;
 }
 
 
-// LOAD JSON
+// JSON LOADER
 
 async function loadJSON(url) {
   const response = await fetch(url);
@@ -472,18 +522,25 @@ async function loadJSON(url) {
 // INITIALIZE
 
 async function init() {
-  // Load verified local original filenames.
+  // Load verified local PNG file list.
   try {
-    const saved = await loadJSON("emoji-manifest.json");
+    const saved = await loadJSON(
+      "emoji-manifest.json"
+    );
+
     manifest = saved.files || {};
+
   } catch (error) {
-    console.info("로컬 이미지 목록 없음. 온라인 원본을 사용합니다.");
+    console.info(
+      "Local PNG manifest unavailable."
+    );
   }
 
+  // Full emoji catalogue.
   const dataSources = [
     "emoji-data.json",
-    DATA_SOURCE,
-    DATA_SOURCE_ALT
+    CDN + "emoji.json",
+    CDN_ALT + "emoji.json"
   ];
 
   for (const url of dataSources) {
@@ -497,20 +554,25 @@ async function init() {
       groups = makeGroups(data);
 
       status.textContent =
-        "Apple original PNG — 160px or higher";
+        "Apple PNG · Default emoji only";
 
       render();
       return;
 
     } catch (error) {
-      console.warn("목록 로딩 실패:", url, error);
+      console.warn(
+        "Emoji data unavailable:",
+        url,
+        error
+      );
     }
   }
 
+  // Offline fallback.
   groups = fallbackGroups();
 
   status.textContent =
-    "Apple original PNG — fallback emoji list";
+    "Apple PNG · Default emoji catalogue";
 
   render();
 }
