@@ -1,128 +1,505 @@
-* { 
-  box-sizing: border-box; 
+* {
+  box-sizing: border-box;
 }
 
-html { 
-  scroll-behavior: smooth; 
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  margin: 0; 
-  background: #fff; 
-  color: #000; 
-  font-family: 'Noto Sans', sans-serif; 
+  margin: 0;
+  background: #fff;
+  color: #000;
+  font-family: 'Noto Sans', sans-serif;
 }
 
-header { 
-  text-align: center; 
-  padding: clamp(64px, 10vh, 110px) 16px 62px; 
+
+/* ========================================
+   HEADER
+======================================== */
+
+header {
+  text-align: center;
+  padding: clamp(64px, 10vh, 110px) 16px 62px;
 }
 
-h1 { 
-  margin: 0; 
-  font-size: clamp(22px, 2vw, 30px); 
-  font-weight: 800; 
-  letter-spacing: -.035em; 
+h1 {
+  margin: 0;
+  font-size: clamp(22px, 2vw, 30px);
+  font-weight: 800;
+  letter-spacing: -.035em;
 }
 
-main { 
-  width: min(90vw, 600px); 
-  margin: 0 auto; 
+
+/* ========================================
+   MAIN
+======================================== */
+
+main {
+  width: min(90vw, 600px);
+  margin: 0 auto;
 }
 
-.toolbar { 
-  display: flex; 
-  align-items: center; 
-  gap: 12px; 
-  margin-bottom: 14px; 
+
+/* ========================================
+   SEARCH
+======================================== */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
-#search { 
+#search {
   min-width: 0;
-  width: 100%; 
-  font: inherit; 
-  font-size: 13px; 
-  padding: 11px 12px; 
-  border: 1px 
-  solid #ddd; 
-  border-radius: 6px; 
-  outline-offset: 2px; 
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  padding: 11px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  outline-offset: 2px;
 }
 
 #count {
-  white-space: nowrap; 
-  font-size: 12px; 
-  color: #777; 
-  font-variant-numeric: tabular-nums; 
+  white-space: nowrap;
+  font-size: 12px;
+  color: #777;
+  font-variant-numeric: tabular-nums;
 }
 
-#categories { 
-  display: flex; 
-  flex-wrap: wrap; 
-  gap: 6px 12px; 
-  margin: 0 0 64px; 
+.status {
+  font-size: 12px;
+  color: #666;
+  margin: 0 0 20px;
+  line-height: 1.6;
 }
 
-#categories a { 
-  color: #666; 
-  font-size: 0.75rem; 
-  text-decoration: none; 
+.status:empty {
+  display: none;
 }
 
-#categories a:hover, #categories a:focus-visible { 
-  text-decoration: underline; 
-  color: #111; 
+
+/* ========================================
+   CATEGORIES
+======================================== */
+
+#categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0 0 64px;
 }
 
-section { 
-  margin-bottom: 78px; 
-  scroll-margin-top: 24px; 
+#categories a {
+  color: #666;
+  font-size: .75rem;
+  text-decoration: none;
 }
 
-h2 { 
-  font-size: 1rem; 
-  font-weight: 400; 
-  margin: 0 0 14px; 
-  letter-spacing: -.03em; 
+#categories a:hover,
+#categories a:focus-visible {
+  text-decoration: underline;
+  color: #111;
 }
 
-.grid { 
+
+/* ========================================
+   SECTIONS
+======================================== */
+
+section {
+  margin-bottom: 78px;
+  scroll-margin-top: 24px;
+}
+
+h2 {
+  font-size: 1rem;
+  font-weight: 400;
+  margin: 0 0 14px;
+  letter-spacing: -.03em;
+}
+
+
+/* ========================================
+   GRID
+======================================== */
+
+.grid {
   display: grid;
-  grid-template-columns: repeat(10,minmax(0,1fr));
-  gap: 3px; 
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 3px;
 }
 
-.emoji { appearance: none; display: flex; align-items: center; justify-content: center; width: 100%; min-width: 0; aspect-ratio: 1 / 1; padding: 9%; background: #fff; border: 0; border-radius: 6px; cursor: pointer; }
-.emoji:not(:disabled):hover { background: #eee; }
-.emoji:focus-visible { outline: 2px solid #222; outline-offset: 1px; }
-.emoji img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.emoji.unavailable, .emoji:disabled { opacity: .28; cursor: not-allowed; }
-.emoji.unavailable::after { content: '×'; font: 20px Arial, sans-serif; color: #777; }
-.emoji.unavailable img { display: none; }
-.note { color: #888; font-size: 11px; line-height: 1.8; margin: 14px 0 90px; }
-#empty { margin: 60px 0 100px; text-align: center; color: #888; font-size: 14px; }
-.toast { position: fixed; bottom: 30px; left: 50%; transform: translate(-50%,10px); padding: 11px 20px; border-radius: 6px; background: #222; color: #fff; font-size: 13px; white-space: nowrap; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .2s, transform .2s, visibility .2s; z-index: 100; }
-.toast.show { opacity: 1; visibility: visible; transform: translate(-50%,0); }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
-@media (max-width: 700px) { main { width: min(92vw,600px); } .grid { grid-template-columns: repeat(8,minmax(0,1fr)); } h2 { font-size: 23px; } header { padding-bottom: 48px; } #categories { margin-bottom: 52px; } }
-@media (max-width: 420px) { .grid { grid-template-columns: repeat(6,minmax(0,1fr)); } }
-.status { font-size: 12px; color: #666; margin: 0 0 20px; line-height: 1.6; }
-.status:empty { display: none; }
 
-/* 좌우 여백 상단 50px: 맨 위로 이동 */
+/* ========================================
+   EMOJI CELL
+======================================== */
+
+.emoji-cell {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1 / 1;
+}
+
+
+/* ========================================
+   EMOJI BUTTON
+======================================== */
+
+.emoji {
+  appearance: none;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+
+  padding: 9%;
+
+  background: #fff;
+  border: 0;
+  border-radius: 6px;
+
+  cursor: pointer;
+}
+
+/* Hover remains active for normal copy. */
+
+.emoji-cell:hover .emoji:not(:disabled) {
+  background: #eee;
+}
+
+.emoji:focus-visible {
+  outline: 2px solid #222;
+  outline-offset: 1px;
+}
+
+.emoji img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+
+/* ========================================
+   SKIN TONE ARROW
+======================================== */
+
+.skin-toggle {
+  appearance: none;
+
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 18px;
+  height: 18px;
+
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+
+  background: #fff;
+  color: #555;
+
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1;
+
+  cursor: pointer;
+
+  opacity: .35;
+  z-index: 2;
+}
+
+.emoji-cell:hover .skin-toggle,
+.skin-toggle:focus-visible,
+.skin-toggle[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.skin-toggle:hover,
+.skin-toggle[aria-expanded="true"] {
+  background: #ddd;
+}
+
+.skin-toggle:focus-visible {
+  outline: 2px solid #222;
+}
+
+
+/* ========================================
+   SKIN TONE PICKER
+======================================== */
+
+.skin-picker {
+  position: fixed;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+
+  gap: 4px;
+
+  width: max-content;
+  max-width: calc(100vw - 16px);
+
+  padding: 8px;
+
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 9px;
+
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, .10);
+
+  z-index: 1000;
+}
+
+
+/* ========================================
+   SKIN OPTION
+======================================== */
+
+.skin-option {
+  appearance: none;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 42px;
+  height: 42px;
+
+  padding: 5px;
+
+  border: none;
+  border-radius: 6px;
+
+  background: #fff;
+  cursor: pointer;
+}
+
+.skin-option:hover:not(:disabled) {
+  background: #eee;
+}
+
+.skin-option:focus-visible {
+  outline: 2px solid #222;
+}
+
+.skin-option img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.skin-option.default-option {
+  border: 1px solid #eee;
+}
+
+
+/* ========================================
+   UNAVAILABLE IMAGES
+======================================== */
+
+.emoji.unavailable,
+.emoji:disabled {
+  opacity: .28;
+  cursor: not-allowed;
+}
+
+.emoji.unavailable::after {
+  content: '×';
+  font: 20px Arial, sans-serif;
+  color: #777;
+}
+
+.emoji.unavailable img {
+  display: none;
+}
+
+.skin-option.unavailable,
+.skin-option:disabled {
+  opacity: .25;
+  cursor: not-allowed;
+}
+
+
+/* ========================================
+   COPY MESSAGE
+======================================== */
+
+.toast {
+  position: fixed;
+
+  bottom: 30px;
+  left: 50%;
+
+  transform: translate(-50%, 10px);
+
+  padding: 11px 20px;
+  border-radius: 6px;
+
+  background: #222;
+  color: #fff;
+
+  font-size: 13px;
+  white-space: nowrap;
+
+  opacity: 0;
+  visibility: hidden;
+
+  pointer-events: none;
+
+  transition:
+    opacity .2s,
+    transform .2s,
+    visibility .2s;
+
+  z-index: 2000;
+}
+
+.toast.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+
+/* ========================================
+   OTHER TEXT
+======================================== */
+
+.note {
+  color: #888;
+  font-size: 11px;
+  line-height: 1.8;
+  margin: 14px 0 90px;
+}
+
+#empty {
+  margin: 60px 0 100px;
+  text-align: center;
+  color: #888;
+  font-size: 14px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+
+/* ========================================
+   BACK TO TOP
+======================================== */
+
 .back-to-top {
   position: fixed;
   top: 0;
+
   height: 50px;
-  width: max(0px, calc((100vw - min(90vw, 600px)) / 2));
+
+  width: max(
+    0px,
+    calc((100vw - min(90vw, 600px)) / 2)
+  );
+
   padding: 0;
   border: 0;
+
   background: transparent;
+
   font: 11px 'Noto Sans', sans-serif;
+
   cursor: pointer;
   z-index: 110;
 }
-.back-to-top-left { left: 0; text-align: center; }
-.back-to-top-right { right: 0; text-align: center; }
-.back-to-top:focus-visible { outline: 2px solid #444; outline-offset: -2px; }
 
+.back-to-top-left {
+  left: 0;
+  text-align: center;
+}
+
+.back-to-top-right {
+  right: 0;
+  text-align: center;
+}
+
+.back-to-top:focus-visible {
+  outline: 2px solid #444;
+  outline-offset: -2px;
+}
+
+
+/* ========================================
+   RESPONSIVE — TABLET
+======================================== */
+
+@media (max-width: 700px) {
+  main {
+    width: min(92vw, 600px);
+  }
+
+  .grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+
+  h2 {
+    font-size: 23px;
+  }
+
+  header {
+    padding-bottom: 48px;
+  }
+
+  #categories {
+    margin-bottom: 52px;
+  }
+
+  .skin-toggle {
+    opacity: .75;
+  }
+}
+
+
+/* ========================================
+   RESPONSIVE — MOBILE
+======================================== */
+
+@media (max-width: 420px) {
+  .grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .skin-toggle {
+    width: 16px;
+    height: 16px;
+    font-size: 15px;
+    opacity: 1;
+  }
+
+  .skin-option {
+    width: 38px;
+    height: 38px;
+  }
+}
