@@ -1,7 +1,7 @@
 
 /* ==========================================
    APPLE EMOJI ARCHIVE
-   Copy + Skin Tone Picker
+   Hover Skin Tone Picker
 ========================================== */
 
 // IMAGE SOURCES
@@ -34,8 +34,10 @@ const toast = document.querySelector("#toast");
 let groups = [];
 let manifest = {};
 let toastTimer;
+
 let activePicker = null;
-let activeTrigger = null;
+let activeCell = null;
+let closeTimer = null;
 
 
 // CATEGORIES
@@ -53,7 +55,7 @@ const categoryNames = new Map([
 ]);
 
 
-// KNOWN EMOJIPEDIA FILENAMES
+// EMOJIPEDIA FILENAMES
 
 const filenameOverrides = {
   "1f600": "grinning-face_1f600.png",
@@ -76,7 +78,7 @@ function notify(message) {
 }
 
 
-// UNICODE UTILITIES
+// UNICODE
 
 function fromUnified(code) {
   return code
@@ -117,7 +119,7 @@ function getFilename(item) {
 }
 
 
-// CREATE EMOJI DATA
+// EMOJI DATA
 
 function makeItem(entry, fallbackName = "") {
   const code = entry.unified.toLowerCase();
@@ -132,15 +134,12 @@ function makeItem(entry, fallbackName = "") {
     symbol: fromUnified(code),
     code,
     image: (entry.image || "").toLowerCase(),
-
-    // Skin-tone options
     variations: []
   };
 }
 
 
 // GROUPS
-// Only default emoji appear in the main Grid.
 
 function makeGroups(data) {
   const map = new Map();
@@ -164,10 +163,7 @@ function makeGroups(data) {
     if (!emoji.unified || !emoji.image) continue;
     if (emoji.has_img_apple === false) continue;
 
-    const category = categoryNames.get(
-      emoji.category
-    );
-
+    const category = categoryNames.get(emoji.category);
     const group = map.get(category);
 
     if (!group) continue;
@@ -179,7 +175,7 @@ function makeGroups(data) {
 
     const item = makeItem(emoji);
 
-    // Add skin-tone variants only to the picker.
+    // Variations only appear in the hover picker.
     const variations = Object.entries(
       emoji.skin_variations || {}
     );
@@ -196,7 +192,6 @@ function makeGroups(data) {
       item.variations.push(variant);
     }
 
-    // Prevent duplicate variants.
     const unique = new Map();
 
     for (const variant of item.variations) {
@@ -206,7 +201,6 @@ function makeGroups(data) {
     }
 
     item.variations = [...unique.values()];
-
     group.items.push(item);
   }
 
@@ -242,14 +236,12 @@ function fallbackGroups() {
 function imageSources(item) {
   const sources = [];
 
-  // Local verified Apple PNG.
   if (manifest[item.code]) {
     sources.push(
       `img/apple/${manifest[item.code]}`
     );
   }
 
-  // Previously supplied Apple PNG originals.
   if (item.code === "1f600") {
     sources.push("img/grinning-face.png");
   }
@@ -258,26 +250,22 @@ function imageSources(item) {
     sources.push("img/grinning-face-eyes.png");
   }
 
-  // High-resolution Apple PNG.
   if (item.image) {
     sources.push(APPLE_160 + item.image);
   }
 
-  // Emojipedia Apple PNG.
   sources.push(
     EMOJIPEDIA + getFilename(item)
   );
 
-  // No 64px upscaling fallback.
   return [...new Set(sources)];
 }
 
 
-// LOAD IMAGE PREVIEW
+// PREVIEW IMAGE
 
 function loadPreview(img, item, onFail) {
   const sources = imageSources(item);
-
   let index = 0;
 
   img.alt = "";
@@ -291,12 +279,11 @@ function loadPreview(img, item, onFail) {
       img.src = sources[index];
     } else {
       img.removeAttribute("src");
-      if (onFail) onFail();
+      onFail?.();
     }
   }
 
   img.onload = () => {
-    // Reject low-resolution image files.
     if (
       img.naturalWidth < MIN_SIZE ||
       img.naturalHeight < MIN_SIZE
@@ -309,14 +296,13 @@ function loadPreview(img, item, onFail) {
 
   if (sources.length) {
     img.src = sources[0];
-  } else if (onFail) {
-    onFail();
+  } else {
+    onFail?.();
   }
 }
 
 
 // READ ORIGINAL PNG
-// Preserve original bytes and dimensions.
 
 async function readPNG(url) {
   const response = await fetch(url);
@@ -351,20 +337,11 @@ async function readPNG(url) {
   const width = view.getUint32(16);
   const height = view.getUint32(20);
 
-  if (
-    width < MIN_SIZE ||
-    height < MIN_SIZE
-  ) {
-    throw new Error(
-      `이미지 해상도가 부족합니다: ${width}x${height}`
-    );
+  if (width < MIN_SIZE || height < MIN_SIZE) {
+    throw new Error("160px 미만 이미지입니다.");
   }
 
-  return {
-    blob,
-    width,
-    height
-  };
+  return { blob, width, height };
 }
 
 
@@ -376,12 +353,9 @@ async function getOriginalPNG(item, currentURL) {
     ...imageSources(item)
   ].filter(Boolean);
 
-  const unique = [...new Set(sources)];
-
-  for (const url of unique) {
+  for (const url of new Set(sources)) {
     try {
       return await readPNG(url);
-
     } catch (error) {
       console.info(
         "PNG source unavailable:",
@@ -397,7 +371,7 @@ async function getOriginalPNG(item, currentURL) {
 }
 
 
-// DOWNLOAD FILE
+// DOWNLOAD
 
 function downloadPNG(data, item) {
   const url = URL.createObjectURL(data.blob);
@@ -411,14 +385,11 @@ function downloadPNG(data, item) {
   link.click();
   link.remove();
 
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-  }, 5000);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 
-// COPY / DOWNLOAD
-// Called directly by a user click.
+// COPY OR DOWNLOAD
 
 async function handleEmojiAction(item, currentURL, event) {
   const isDownload = event.shiftKey;
@@ -447,9 +418,8 @@ async function handleEmojiAction(item, currentURL, event) {
       downloadPNG(data, item);
 
       notify(
-        `원본 다운로드 완료! (${data.width}×${data.height}px)`
+        `원본 다운로드 완료!`
       );
-
     } else {
       await navigator.clipboard.write([
         new ClipboardItem({
@@ -462,7 +432,7 @@ async function handleEmojiAction(item, currentURL, event) {
       const data = await pngPromise;
 
       notify(
-        `복사되었습니다! (${data.width}×${data.height}px)`
+        `복사되었습니다!`
       );
     }
 
@@ -484,41 +454,52 @@ async function handleEmojiAction(item, currentURL, event) {
 }
 
 
-// CLOSE SKIN TONE PICKER
+// HOVER PICKER CONTROL
+
+function cancelClose() {
+  clearTimeout(closeTimer);
+  closeTimer = null;
+}
 
 function closePicker() {
-  if (activeTrigger) {
-    activeTrigger.setAttribute(
-      "aria-expanded",
-      "false"
-    );
-  }
+  cancelClose();
 
-  if (activePicker) {
-    activePicker.remove();
-  }
-
+  activePicker?.remove();
   activePicker = null;
-  activeTrigger = null;
+
+  if (activeCell) {
+    activeCell.classList.remove("picker-open");
+  }
+
+  activeCell = null;
+}
+
+function scheduleClose() {
+  cancelClose();
+
+  // Short delay allows the pointer to cross
+  // the space between the emoji and the picker.
+  closeTimer = setTimeout(() => {
+    closePicker();
+  }, 180);
 }
 
 
-// POSITION SKIN TONE PICKER
+// PICKER POSITION
 
-function positionPicker(trigger, picker) {
-  const rect = trigger.getBoundingClientRect();
+function positionPicker(cell, picker) {
+  const rect = cell.getBoundingClientRect();
 
   const pickerWidth = picker.offsetWidth;
   const pickerHeight = picker.offsetHeight;
 
-  const margin = 8;
+  const margin = 6;
 
   let left =
     rect.left + rect.width / 2 - pickerWidth / 2;
 
   let top = rect.bottom + margin;
 
-  // Keep picker inside the viewport.
   left = Math.max(
     margin,
     Math.min(
@@ -527,7 +508,7 @@ function positionPicker(trigger, picker) {
     )
   );
 
-  // Open upward if there is no space below.
+  // Move above the emoji if space is limited.
   if (
     top + pickerHeight >
     window.innerHeight - margin
@@ -535,36 +516,35 @@ function positionPicker(trigger, picker) {
     top = rect.top - pickerHeight - margin;
   }
 
-  top = Math.max(margin, top);
-
   picker.style.left = `${left}px`;
-  picker.style.top = `${top}px`;
+  picker.style.top = `${Math.max(margin, top)}px`;
 }
 
 
-// OPEN SKIN TONE PICKER
+// OPEN PICKER ON HOVER
 
-function openPicker(item, trigger) {
-  // Clicking the same arrow closes the picker.
-  if (activeTrigger === trigger) {
-    closePicker();
+function openPicker(item, cell) {
+  if (!item.variations.length) return;
+
+  cancelClose();
+
+  if (activeCell === cell && activePicker) {
     return;
   }
 
   closePicker();
 
-  if (!item.variations.length) return;
-
   const picker = document.createElement("div");
 
   picker.className = "skin-picker";
   picker.setAttribute("role", "group");
+
   picker.setAttribute(
     "aria-label",
     `${item.name} 피부색 선택`
   );
 
-  // Include the default emoji as the first option.
+  // Default emoji is also available in picker.
   const options = [
     item,
     ...item.variations
@@ -576,8 +556,8 @@ function openPicker(item, trigger) {
 
     button.className = "skin-option";
     button.type = "button";
-
     button.title = option.name;
+
     button.setAttribute(
       "aria-label",
       option.name
@@ -622,24 +602,23 @@ function openPicker(item, trigger) {
     picker.appendChild(button);
   }
 
+  picker.addEventListener("pointerenter", cancelClose);
+  picker.addEventListener("pointerleave", scheduleClose);
+
   document.body.appendChild(picker);
 
   activePicker = picker;
-  activeTrigger = trigger;
+  activeCell = cell;
 
-  trigger.setAttribute(
-    "aria-expanded",
-    "true"
-  );
+  cell.classList.add("picker-open");
 
-  positionPicker(trigger, picker);
+  positionPicker(cell, picker);
 }
 
 
-// CREATE MAIN EMOJI
+// MAIN EMOJI BUTTON
 
 function createEmoji(item) {
-  // Wrapper allows a separate arrow button.
   const cell = document.createElement("div");
   cell.className = "emoji-cell";
 
@@ -650,7 +629,7 @@ function createEmoji(item) {
   button.type = "button";
 
   button.title =
-    `${item.name} — Click to copy / Shift+Click to download`;
+    `${item.name} — Click: Copy / Shift+Click: Download`;
 
   button.setAttribute(
     "aria-label",
@@ -675,7 +654,7 @@ function createEmoji(item) {
 
   button.appendChild(img);
 
-  // Default emoji: always copy on click.
+  // Clicking the main emoji always copies.
   button.addEventListener("click", event => {
     if (button.disabled) return;
 
@@ -688,48 +667,31 @@ function createEmoji(item) {
 
   cell.appendChild(button);
 
-  // Only emojis with variants get an arrow.
+  // No arrow button is created.
+  // Only emojis with variants open a picker.
   if (item.variations.length > 0) {
-    const arrow = document.createElement("button");
+    cell.classList.add("has-variations");
 
-    arrow.className = "skin-toggle";
-    arrow.type = "button";
-
-    arrow.textContent = "⌄";
-
-    arrow.title = "피부색 선택";
-
-    arrow.setAttribute(
-      "aria-label",
-      `${item.name} 피부색 선택`
-    );
-
-    arrow.setAttribute(
-      "aria-haspopup",
-      "true"
-    );
-
-    arrow.setAttribute(
-      "aria-expanded",
-      "false"
-    );
-
-    // Arrow does NOT trigger image copy.
-    arrow.addEventListener("click", event => {
-      event.preventDefault();
-      event.stopPropagation();
-
-      openPicker(item, arrow);
+    cell.addEventListener("pointerenter", event => {
+      if (event.pointerType === "mouse" ||
+          event.pointerType === "pen") {
+        openPicker(item, cell);
+      }
     });
 
-    cell.appendChild(arrow);
+    cell.addEventListener("pointerleave", scheduleClose);
+
+    // Keyboard focus also opens the picker.
+    cell.addEventListener("focusin", () => {
+      openPicker(item, cell);
+    });
   }
 
   return cell;
 }
 
 
-// RENDER GRID
+// RENDER
 
 function render() {
   closePicker();
@@ -755,7 +717,6 @@ function render() {
     total += items.length;
 
     const section = document.createElement("section");
-
     section.id = `category-${index}`;
 
     const title = document.createElement("h2");
@@ -799,21 +760,17 @@ async function loadJSON(url) {
 }
 
 
-// INITIALIZATION
+// INITIALIZE
 
 async function init() {
-  // Optional local PNG manifest.
   try {
     const saved = await loadJSON(
       "emoji-manifest.json"
     );
 
     manifest = saved.files || {};
-
   } catch (error) {
-    console.info(
-      "No local PNG manifest."
-    );
+    console.info("No local PNG manifest.");
   }
 
   const dataSources = [
@@ -833,7 +790,7 @@ async function init() {
       groups = makeGroups(data);
 
       status.textContent =
-        "Apple PNG · Click to copy";
+        "Apple PNG · Hover for skin tones · Click to copy";
 
       render();
       return;
@@ -860,13 +817,12 @@ async function init() {
 
 search.addEventListener("input", render);
 
-// Close when clicking outside.
-document.addEventListener("click", event => {
+document.addEventListener("pointerdown", event => {
   if (!activePicker) return;
 
   if (
     activePicker.contains(event.target) ||
-    activeTrigger?.contains(event.target)
+    activeCell?.contains(event.target)
   ) {
     return;
   }
@@ -874,24 +830,18 @@ document.addEventListener("click", event => {
   closePicker();
 });
 
-// Escape closes the picker.
 document.addEventListener("keydown", event => {
-  if (event.key === "Escape" && activePicker) {
-    const trigger = activeTrigger;
-
+  if (event.key === "Escape") {
     closePicker();
-    trigger?.focus();
   }
 });
 
-// Close on scrolling or resizing.
 window.addEventListener("scroll", closePicker, {
   passive: true
 });
 
 window.addEventListener("resize", closePicker);
 
-// Back to top.
 document.querySelectorAll(".back-to-top")
   .forEach(button => {
     button.addEventListener("click", () => {
